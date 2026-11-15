@@ -1,0 +1,359 @@
+[
+ {
+  "type": "function",
+  "function": {
+   "name": "scan",
+   "description": "Passive, channel-locked 2.4 GHz sweep on the Kali radio (wifi-scan.sh). LISTENS ONLY \u2014 attacks nothing, needs no authorization. Returns one line per nearby AP as 'BSSID|CH|PWR|CLIENTS|ESSID', sorted most-clients then strongest. Always run this first to build the target picker and to read the CLIENTS column (decides handshake vs PMKID). The adapter is 2.4 GHz only, so APs on 5/6 GHz will not appear.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "seconds_per_channel": {
+      "type": "integer",
+      "description": "Dwell time per 2.4 GHz channel. Default 3. Keep small so the total sweep stays well under the airodump stability window.",
+      "minimum": 1,
+      "maximum": 8,
+      "default": 3
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "capture_handshake",
+   "description": "GATED ATTACK (allowlist-checked at run time). Locate the AP's channel, targeted-deauth a connected client to force a fast re-handshake, and capture the WPA2 4-way handshake on Kali (grab.sh) to /tmp/cap-01.cap. Requires a client currently associated to the target (CLIENTS > 0); with none connected it returns RESULT=NO_HANDSHAKE \u2014 pivot to pmkid instead. Capture only; cracking happens on the Mac GPU via crack(). Refuses any BSSID not in authorized-targets.txt.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "bssid": {
+      "type": "string",
+      "description": "Target AP BSSID (MAC), taken from a scan row. Must be on the allowlist.",
+      "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+     },
+     "channel": {
+      "type": "integer",
+      "description": "Optional 2.4 GHz channel (1-13). Pass it when known to skip the flaky locate scan and capture faster.",
+      "minimum": 1,
+      "maximum": 13
+     }
+    },
+    "required": [
+     "bssid"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "crack",
+   "description": "Tiered WPA2 crack on the MAC GPU (crack-mac.sh, hashcat Metal ~185k H/s). Converts the latest capture to mode 22000 and runs cheapest-first, stopping the instant the password is found. Not an attack on the air \u2014 it works on an already-captured hash \u2014 but only run it on captures from authorized targets. Returns the recovered PASSWORD or 'NOT cracked' with the suggestion to go one level deeper.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "level": {
+      "type": "integer",
+      "description": "Crack depth. 1 = fast (weak-pins -> rockyou -> 8-digit mask, ~minutes). 2 = adds rockyou x rules + 10-digit mask (longer). 3 = adds SecLists WiFi-WPA + big lists x rules (deep, can run long). Start at 1 and escalate only if it exhausts.",
+      "enum": [
+       1,
+       2,
+       3
+      ],
+      "default": 1
+     },
+     "capfile": {
+      "type": "string",
+      "description": "Optional path to a specific .cap/.pcapng. Omit to auto-pull the newest /tmp/cap-01.cap from Kali."
+     },
+     "bssid": {
+      "type": "string",
+      "description": "Target AP BSSID to PIN the crack to, so the key is attributed to the right network and a wrong/stale capture is refused (not a false old password). Use the selected target's BSSID.",
+      "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+     },
+     "mask": {
+      "type": "string",
+      "description": "Optional hashcat mask (-a 3) to run FIRST before the tiers \u2014 the targeted move vs human-chosen keys. ?d digit ?l lower ?u upper ?s symbol. e.g. Word+4digits = ?u?l?l?l?l?d?d?d?d. Omit for the normal tiers."
+     },
+     "single": {
+      "type": "boolean",
+      "default": false,
+      "description": "Run ONLY this tier (not tiers 1..N). Use for approval-gated escalation: crack tier 1, and only call tier 2/3 after the user agrees (each slower tier costs much more time)."
+     }
+    },
+    "required": [
+     "level"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "triage",
+   "description": "Inspect a capture WITHOUT cracking and WITHOUT touching the radio: converts the target's capture to mode 22000 and reports which networks are inside (ESSID+BSSID), PMKID vs EAPOL counts, whether it is crackable, and whether the SELECTED target is even present. Run it between capture and crack so you never waste a crack on an empty or wrong-network file. Safe, local, read-only.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "bssid": {
+      "type": "string",
+      "description": "Target AP BSSID whose newest capture to inspect.",
+      "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+     }
+    },
+    "required": [
+     "bssid"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "deauth",
+   "description": "GATED ATTACK (allowlist-checked). Send bounded, stoppable deauth frames to an authorized AP (aireplay-ng). Use targeted mode to force a handshake or demo a single-client disconnect; broadcast kicks every client (higher impact). Prefer targeted \u2014 broadcast and continuous bursts need explicit user confirmation first. If the client stays up, that's a finding (802.11w/PMF) \u2014 stop escalating and pivot to pmkid. Refuses any off-list BSSID.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "bssid": {
+      "type": "string",
+      "description": "Target AP BSSID (MAC). Must be on the allowlist.",
+      "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+     },
+     "mode": {
+      "type": "string",
+      "description": "targeted = deauth one specific client (quietest, preferred). broadcast = deauth all clients of the AP (needs confirmation).",
+      "enum": [
+       "targeted",
+       "broadcast"
+      ]
+     },
+     "client": {
+      "type": "string",
+      "description": "Client station MAC to kick. Required for targeted mode; ignored for broadcast.",
+      "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+     },
+     "count": {
+      "type": "integer",
+      "description": "Number of deauth frames to send (small bursts only; >30 is just noise). Default 5.",
+      "minimum": 1,
+      "maximum": 30,
+      "default": 5
+     }
+    },
+    "required": [
+     "bssid",
+     "mode"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "wps",
+   "description": "GATED ATTACK (allowlist-checked). Enumerate WPS (wash) and attempt recovery of the WPS PIN / PSK on Kali. ALWAYS try Pixie-Dust first \u2014 it is offline, ignores WPS lockout, and finishes in seconds-to-minutes on weak chipsets (TP-Link is the most-affected vendor). A recovered PIN is replayed to dump the plaintext PSK (no hashcat needed). Online PIN brute is a lockout-aware last resort. Refuses any off-list BSSID.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "bssid": {
+      "type": "string",
+      "description": "Target AP BSSID (MAC). Must be on the allowlist.",
+      "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+     },
+     "channel": {
+      "type": "integer",
+      "description": "Optional 2.4 GHz channel (1-13) of the AP, to skip re-locating it.",
+      "minimum": 1,
+      "maximum": 13
+     },
+     "method": {
+      "type": "string",
+      "description": "pixie = offline Pixie-Dust (default, try first). pin = online PIN brute (last resort, unlocked APs only, abandons on lockout).",
+      "enum": [
+       "pixie",
+       "pin"
+      ],
+      "default": "pixie"
+     }
+    },
+    "required": [
+     "bssid"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "pmkid",
+   "description": "GATED ATTACK (allowlist-checked). Clientless PMKID capture on Kali (hcxdumptool) \u2014 pulls a crackable RSN PMKID straight from the AP with NO client connected and WITHOUT deauthing anyone. The quiet capture path: prefer it when no clients are associated, when you need silence, or when 802.11w/MFP defeats deauth. WPA3-SAE emits none. Hand the result to crack(). Keep the burst under ~75 s. Refuses any off-list BSSID.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "bssid": {
+      "type": "string",
+      "description": "Target AP BSSID (MAC). Must be on the allowlist.",
+      "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+     },
+     "channel": {
+      "type": "integer",
+      "description": "Optional 2.4 GHz channel (1-13) to lock onto for a tighter, single-AP capture.",
+      "minimum": 1,
+      "maximum": 13
+     },
+     "seconds": {
+      "type": "integer",
+      "description": "Capture window in seconds. Default 70. Hard cap ~75 or airodump/hcxdumptool abort under load.",
+      "minimum": 10,
+      "maximum": 75,
+      "default": 70
+     }
+    },
+    "required": [
+     "bssid"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "rogue_detect",
+   "description": "DEFENSIVE DETECTOR ONLY \u2014 captures nothing, phishes nothing, builds no portal. Passively watches for an evil-twin of a given SSID: the same ESSID advertised by a new/unexpected BSSID, one BSSID on many channels, cipher mismatches, or a co-occurring deauth flood (airodump CSV diff + frame counting). Report findings as 'possible', never 'confirmed', and surface the defense (802.11w/PMF, WPA3-SAE, server-cert pinning). This is the only rogue-AP capability in the system; a credential-harvesting fake-login page is never built.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "ssid": {
+      "type": "string",
+      "description": "The ESSID (network name) to watch for look-alike twins of."
+     },
+     "seconds": {
+      "type": "integer",
+      "description": "Monitoring window in seconds. Default 60.",
+      "minimum": 15,
+      "maximum": 180,
+      "default": 60
+     }
+    },
+    "required": [
+     "ssid"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "doctor",
+   "description": "Adapter + VM self-heal (fix-adapter.sh plus Mac-side recovery). Your go-to on ANY radio error: 0 APs, wlan0 missing, SSH unreachable, airodump aborting. Escalates safely: soft monitor reset (down -> monitor -> up) -> Mac-side USB re-plug (utmctl usb disconnect/connect 2357:010C) -> VM bounce (utmctl stop/start Kali, poll SSH) \u2014 plus injection and 2.4-only band checks. NEVER reloads the driver (modprobe drops USB passthrough). Call it, then retry the failed action.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "level": {
+      "type": "string",
+      "description": "auto = pick the right fix from the symptom (default). soft = monitor reset only. hard = Mac-side USB re-plug then soft reset. vm = bounce the Kali VM and poll SSH.",
+      "enum": [
+       "auto",
+       "soft",
+       "hard",
+       "vm"
+      ],
+      "default": "auto"
+     }
+    },
+    "required": []
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "authorize",
+   "description": "Record the user's authorization of a target by adding its BSSID to authorized-targets.txt \u2014 the ONLY way an AP becomes a legal attack target. The allowlist ships empty and is filled on-site. Only call this for an AP the user has actually claimed as their own gear or an organiser-sanctioned target; you are recording their authorization, not granting your own. A target not on the list is refused by every attack tool.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "bssid": {
+      "type": "string",
+      "description": "BSSID (MAC) to authorize, from a scan row or the organiser's list. Case-insensitive.",
+      "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+     },
+     "label": {
+      "type": "string",
+      "description": "Optional human label for the entry (e.g. 'my home router', 'comp-AP-3')."
+     },
+     "essid": {
+      "type": "string",
+      "description": "Optional ESSID, recorded for the crack-time ESSID allowlist (defense-in-depth so a stray off-list capture can't be cracked)."
+     }
+    },
+    "required": [
+     "bssid"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "recon",
+   "description": "GATED (allowlist-checked). Focused, RECEIVE-ONLY client enumeration of ONE authorized AP (recon.sh): channel-locks onto the target and lists its associated client stations (MAC, signal, packets) plus its cipher/auth \u2014 no transmit, no deauth. Use after scan() to find a client MAC to feed targeted deauth/capture, or to confirm a target is in use. Refuses any off-list BSSID.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "bssid": {
+      "type": "string",
+      "description": "Target AP BSSID (MAC), from a scan row. Must be on the allowlist.",
+      "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+     },
+     "channel": {
+      "type": "integer",
+      "description": "Optional 2.4 GHz channel (1-13) to lock onto; skips re-locating the AP.",
+      "minimum": 1,
+      "maximum": 13
+     },
+     "seconds": {
+      "type": "integer",
+      "description": "Enumeration window in seconds. Default 15 (clamped 5-120).",
+      "minimum": 5,
+      "maximum": 120,
+      "default": 15
+     }
+    },
+    "required": [
+     "bssid"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "spoof",
+   "description": "Randomize the Kali adapter's OWN MAC address (spoof.sh, macchanger). Touches only your own radio identity \u2014 no target, no network, nothing on the air \u2014 so it is NOT allowlist-gated. Use before recon/scan for privacy, or mode=restore to put the permanent hardware MAC back. Requires no authorization.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "mode": {
+      "type": "string",
+      "description": "random = assign a random MAC (default). restore = put the permanent hardware MAC back. explicit = set the MAC given in 'mac'.",
+      "enum": [
+       "random",
+       "restore",
+       "explicit"
+      ],
+      "default": "random"
+     },
+     "mac": {
+      "type": "string",
+      "description": "The MAC to set when mode=explicit.",
+      "pattern": "^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$"
+     }
+    },
+    "required": []
+   }
+  }
+ }
+]

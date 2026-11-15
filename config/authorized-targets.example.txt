@@ -1,0 +1,12 @@
+# ============================================================================
+#  AUTHORIZED TARGETS  —  populated BY YOU, for YOUR OWN networks only.
+#
+#  Copy this file to   wifi-lab/authorized-targets.txt   and add the BSSIDs of
+#  devices/networks YOU OWN or are explicitly authorized to test.
+#  The backend REFUSES any attack against a BSSID that is not listed here.
+#
+#  One BSSID per line. Lines starting with # are ignored. Ships EMPTY on purpose.
+# ============================================================================
+#
+# Example (delete this and add your OWN device's BSSID):
+# AA:BB:CC:DD:EE:FF    # my own router / my own phone hotspot

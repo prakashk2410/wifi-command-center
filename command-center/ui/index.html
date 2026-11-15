@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wi-Fi Command Center</title>
+<meta name="description" content="Local, authorized-only Wi-Fi audit console. Allowlist-gated. 100% local.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%9B%B0%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css?v=20261114h">
+</head>
+<body>
+<!-- CRT overlays -->
+<div class="crt-scanlines" aria-hidden="true"></div>
+<div class="crt-vignette" aria-hidden="true"></div>
+<div class="crt-flicker" aria-hidden="true"></div>
+
+<!-- ======================= HEADER / HUD ======================= -->
+<header class="hud">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">
+      <span class="wave">)</span><span class="wave">)</span><span class="wave">)</span>
+    </span>
+    <div class="brand-text">
+      <h1>WI<span class="dim">·</span>FI COMMAND<span class="blink">_</span>CENTER</h1>
+      <div class="sub">
+        <span class="tag">LOCAL</span>
+        <span class="tag">NO&nbsp;CLOUD</span>
+        <span class="tag auth-tag">AUTHORIZED&nbsp;ONLY</span>
+        <span id="conn" class="conn off" title="Backend link status">● LINKING…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Adapter Doctor live status strip -->
+  <div class="doctor-strip" id="doctor" title="Adapter Doctor — live radio &amp; VM health">
+    <span class="dlabel">ADAPTER&nbsp;DOCTOR</span>
+    <span class="chip unknown" data-k="vm"><b>VM</b><i>…</i></span>
+    <span class="chip unknown" data-k="wlan0"><b>wlan0</b><i>…</i></span>
+    <span class="chip unknown" data-k="monitor"><b>MON</b><i>…</i></span>
+    <span class="chip unknown" data-k="injection"><b>INJ</b><i>…</i></span>
+    <span class="chip unknown" data-k="band"><b>BAND</b><i>…</i></span>
+    <span class="chip unknown" data-k="aps"><b>APs</b><i>…</i></span>
+  </div>
+
+  <div class="doctor-actions">
+    <button id="btn-doctor"    class="btn ghost"  title="Re-run all health checks">⚕ RUN CHECKS</button>
+    <button id="btn-reset"     class="btn warn"   title="Soft monitor reset (ip link down→monitor→up)">⟳ SOFT RESET</button>
+    <button id="btn-reset-hard" class="btn danger-ghost" title="Mac-side USB re-attach (recovers a wedged adapter)">⟲ HARD RESET</button>
+  </div>
+</header>
+
+<!-- ======================= MAIN GRID ======================= -->
+<main class="grid">
+
+  <!-- ---------- TARGETS ---------- -->
+  <section class="panel" id="panel-targets" aria-labelledby="h-targets">
+    <div class="panel-head">
+      <h2 id="h-targets">◢ TARGETS</h2>
+      <div class="panel-tools">
+        <span class="counter" id="auth-count" title="Authorized BSSIDs in the allowlist">AUTH 0</span>
+        <span class="counter" id="target-count" title="APs in last scan">APs 0</span>
+        <button id="scan-btn" class="btn go" title="Run a channel-locked 2.4GHz sweep (wifi-scan.sh)">▷ SCAN</button>
+      </div>
+    </div>
+
+    <div class="allow-bar">
+      <span class="lock">🔒 ALLOWLIST GATE</span>
+      <span class="allow-note">Every attack refuses any BSSID not marked <b class="ok-ink">OK</b>. Populate on-site.</span>
+      <button id="authall-btn" class="btn tiny warn" title="Mark every AP in the current scan authorized for this session (sanctioned venue, written permission for all present)">⚑ AUTHORIZE ALL SCANNED</button>
+    </div>
+
+    <div class="table-wrap" tabindex="0">
+      <table class="scan">
+        <thead>
+          <tr>
+            <th class="c-idx">#</th>
+            <th class="c-bssid">BSSID</th>
+            <th class="c-ch">CH</th>
+            <th class="c-pwr">PWR</th>
+            <th class="c-cli">CLIENTS</th>
+            <th class="c-essid">ESSID</th>
+            <th class="c-auth">AUTH</th>
+            <th class="c-act"></th>
+          </tr>
+        </thead>
+        <tbody id="targets-tbody">
+          <tr class="empty-row"><td colspan="8">No scan yet — hit <b>▷ SCAN</b> (or <b>⟟ DEMO</b> below) to light it up.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-foot">
+      <span class="hint">Click a row to <b>lock</b> it as the active target. <span class="dim">2.4GHz only — a missing AP is almost always 5GHz.</span></span>
+      <button id="demo-btn" class="btn tiny ghost" title="Load obviously-fake sample data to preview the console with no backend">⟟ DEMO DATA</button>
+    </div>
+  </section>
+
+  <!-- ---------- ATTACKS ---------- -->
+  <section class="panel" id="panel-attacks" aria-labelledby="h-attacks">
+    <div class="panel-head">
+      <h2 id="h-attacks">◢ ATTACK&nbsp;MODULES</h2>
+      <div class="panel-tools">
+        <span class="sel-pill" id="selected" title="Locked target">
+          <span class="sel-k">TARGET</span>
+          <span class="sel-bssid" id="sel-bssid">— none —</span>
+          <span class="sel-essid" id="sel-essid"></span>
+          <span class="sel-auth" id="sel-auth"></span>
+        </span>
+      </div>
+    </div>
+
+    <div class="modules">
+      <!-- A -->
+      <div class="mod" data-group="a">
+        <div class="mod-head"><span class="mk">A</span> RECON <span class="mdesc">passive — OUI, vendor, security, clients</span></div>
+        <div class="mod-btns">
+          <button class="btn" id="a-recon" data-need-target="1">⌕ Enumerate target</button>
+          <button class="btn ghost" id="a-rescan">↻ Re-scan band</button>
+        </div>
+      </div>
+
+      <!-- B -->
+      <div class="mod" data-group="b">
+        <div class="mod-head"><span class="mk">B</span> SPOOF <span class="mdesc">your own adapter's identity</span></div>
+        <div class="mod-btns">
+          <button class="btn" id="b-spoof-rand">🂠 Randomize MAC</button>
+          <button class="btn ghost" id="b-spoof-restore">⎌ Restore MAC</button>
+        </div>
+      </div>
+
+      <!-- C -->
+      <div class="mod" data-group="c">
+        <div class="mod-head"><span class="mk">C</span> ROGUE-AP <span class="mdesc blue">DETECT only · blue-team · captures nothing</span></div>
+        <div class="mod-btns">
+          <button class="btn" id="c-rogue">🛰 Scan for evil-twins</button>
+          <button class="btn ghost" id="c-rogue-info" title="What this does and why there is no credential page">ⓘ Concept</button>
+        </div>
+      </div>
+
+      <!-- D -->
+      <div class="mod danger-mod" data-group="d">
+        <div class="mod-head"><span class="mk danger">D</span> DoS&nbsp;/ DEAUTH <span class="mdesc">disruptive — bounded, authorized target only</span></div>
+        <div class="mod-btns">
+          <button class="btn warn" id="d-deauth-one" data-need-target="1" data-need-auth="1">✦ Kick one client</button>
+          <button class="btn warn" id="d-deauth-all" data-need-target="1" data-need-auth="1">✶ Kick all (broadcast)</button>
+          <label class="secs" title="Bounded burst length">
+            <span>dur</span>
+            <select id="deauth-secs">
+              <option value="10">10s</option>
+              <option value="20" selected>20s</option>
+              <option value="40">40s</option>
+              <option value="60">60s</option>
+            </select>
+          </label>
+          <button class="btn stop" id="d-stop" title="Immediately stop all deauth / running attacks">■ STOP</button>
+        </div>
+      </div>
+
+      <!-- E -->
+      <div class="mod" data-group="e">
+        <div class="mod-head"><span class="mk">E</span> KEY-CRACK <span class="mdesc">capture → GPU crack (Metal, ~185k H/s)</span></div>
+        <div class="mod-btns">
+          <button class="btn" id="e-capture" data-need-target="1" data-need-auth="1">⇲ Capture handshake</button>
+          <button class="btn" id="e-pmkid"   data-need-target="1" data-need-auth="1">⚡ PMKID (clientless)</button>
+          <button class="btn ghost" id="e-wps" data-need-target="1" data-need-auth="1">🔑 WPS probe</button>
+          <button class="btn ghost" id="e-triage" data-need-target="1" title="Inspect the capture: which networks/handshakes are inside, before you crack">⌕ Triage capture</button>
+          <span class="crack-line">
+            <label class="level" title="How deep the tiered crack goes">
+              <span>LVL</span>
+              <select id="crack-level">
+                <option value="1" selected>1 · fast (pins·rockyou·8-digit)</option>
+                <option value="2">2 · +rules·10-digit</option>
+                <option value="3">3 · deep (SecLists·rules)</option>
+              </select>
+            </label>
+            <label class="level" title="Pick a common real-world password pattern — fills the mask box. Times are at ~185k H/s on this Mac.">
+              <span>PATTERN</span>
+              <select id="mask-preset">
+                <option value="" selected>— pick a pattern —</option>
+                <option value="?d?d?d?d?d?d?d?d">8 digits · PIN/date (~9 min)</option>
+                <option value="?d?d?d?d?d?d">6 digits · short PIN (~1 min)</option>
+                <option value="?d?d?d?d?d?d?d?d?d?d">10 digits · phone (~15 h)</option>
+                <option value="?u?l?l?l?l?d?d?d?d">Capital+4 lower+4 digits (~9 h)</option>
+                <option value="?u?l?l?l?l?l?d?d">Capital+5 lower+2 digits (~2 days)</option>
+                <option value="?l?l?l?l?l?l?d?d">6 lower+2 digits (~2 days)</option>
+                <option value="?l?l?l?l?l?l?l?l">8 lowercase letters (~2 weeks — usually skip)</option>
+              </select>
+            </label>
+            <input id="crack-mask" class="mask-in" type="text" spellcheck="false" autocomplete="off"
+                   placeholder="or type a mask: ?u?l?l?l?l?d?d?d?d" title="Optional hashcat mask — runs first. ?d digit ?l lower ?u upper ?s symbol. e.g. Word+4 digits = capital+4 lower+4 digits">
+            <button class="btn go" id="e-crack" data-need-target="1" data-need-auth="1">▶ CRACK ON MAC GPU</button>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <p class="safety-foot">
+      🔒 Authorized testing only. Capture · deauth · PMKID · WPS run <b>only</b> against allowlisted targets you own or are sanctioned to test.
+      No credential-phishing / fake-login capture exists in this tool — Rogue-AP is a detector by design.
+    </p>
+  </section>
+
+  <!-- ---------- LIVE LOG ---------- -->
+  <section class="panel log-panel" id="panel-log" aria-labelledby="h-log">
+    <div class="panel-head">
+      <h2 id="h-log">◢ LIVE&nbsp;LOG <span class="ws-dot off" id="ws-dot" title="WebSocket stream">●</span></h2>
+      <div class="panel-tools">
+        <input id="log-filter" class="log-filter" type="text" placeholder="filter…" aria-label="Filter log lines" autocomplete="off" spellcheck="false">
+        <button id="log-pause" class="btn tiny ghost" title="Pause / resume autoscroll">⏸ PAUSE</button>
+        <button id="log-clear" class="btn tiny ghost" title="Clear the log">␡ CLEAR</button>
+      </div>
+    </div>
+    <div class="log" id="log" role="log" aria-live="polite"></div>
+  </section>
+
+  <!-- ---------- AI CHAT ---------- -->
+  <section class="panel chat-panel" id="panel-chat" aria-labelledby="h-chat">
+    <div class="panel-head">
+      <h2 id="h-chat">◢ AI&nbsp;CONSOLE <span class="dim model" id="ai-model">qwen3-agent</span></h2>
+      <div class="panel-tools">
+        <span class="counter" title="Local model endpoint">:11434 /v1</span>
+      </div>
+    </div>
+    <div class="chat-log" id="chat-log" aria-live="polite">
+      <div class="msg ai">
+        <span class="who">ai</span>
+        <span class="bubble">Local AI online. Tell me what to do — e.g. <i>"scan the band"</i>, <i>"recon target 3"</i>, or <i>"capture and crack #2 at level 2"</i>. I only drive the gated modules; the buttons do the same thing deterministically.</span>
+      </div>
+    </div>
+    <form class="chat-input" id="chat-form" autocomplete="off">
+      <span class="prompt">λ</span>
+      <input id="chat-input" type="text" placeholder="talk to the local model…" aria-label="Message the local AI" spellcheck="false">
+      <button class="btn go" id="chat-send" type="submit">SEND ▸</button>
+    </form>
+  </section>
+
+  <!-- ---------- SAVED KEYS (vault) ---------- -->
+  <section class="panel keys-panel" id="panel-keys" aria-labelledby="h-keys">
+    <div class="panel-head">
+      <h2 id="h-keys">◢ SAVED&nbsp;KEYS <span class="dim">recovered passwords · 100% local</span></h2>
+      <div class="panel-tools">
+        <span class="counter" id="keys-count" title="Saved recovered passwords">KEYS 0</span>
+        <button id="keys-refresh" class="btn tiny ghost" title="Reload the vault">↻ REFRESH</button>
+        <button id="keys-clear" class="btn tiny warn" title="Erase the saved-passwords vault">␡ CLEAR VAULT</button>
+      </div>
+    </div>
+    <div class="table-wrap" tabindex="0">
+      <table class="scan keys-table">
+        <thead>
+          <tr>
+            <th class="c-idx">#</th>
+            <th>NETWORK (ESSID)</th>
+            <th class="c-bssid">BSSID</th>
+            <th>PASSWORD</th>
+            <th>WHEN</th>
+            <th class="c-act"></th>
+          </tr>
+        </thead>
+        <tbody id="keys-tbody">
+          <tr class="empty-row"><td colspan="6">No keys saved yet — crack an authorized target and its password lands here (network + password, never the hash).</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="table-foot">
+      <span class="hint">Only passwords you recovered from your own / sanctioned gear. Stored locally at <code>wifi-lab/vault/cracked-keys.tsv</code>.</span>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <span>CONTROLLER <b>Mac</b> · RADIO <b>Kali&nbsp;192.168.64.2</b> · CRACK <b>Mac&nbsp;GPU</b> · AI <b>Ollama&nbsp;:11434</b></span>
+  <span class="dim">UI → <code id="api-base">http://localhost:8787</code> · ws <code>/ws</code> · allowlist-gated · 100% local</span>
+</footer>
+
+<script src="app.js?v=20261114h"></script>
+</body>
+</html>

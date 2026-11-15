@@ -1,0 +1,24 @@
+# ── Private data — NEVER commit ───────────────────────────────
+*.cap
+*.pcap
+*.hccapx
+*.22000
+**/vault/
+cracked-keys.tsv
+**/authorized-targets.txt
+authorized-targets.txt
+captures/
+*-captures/
+*.potfile
+potfile*
+
+# ── Environments / build artifacts ───────────────────────────
+.venv/
+venv/
+env/
+node_modules/
+__pycache__/
+*.pyc
+*.log
+.DS_Store
+.aider*

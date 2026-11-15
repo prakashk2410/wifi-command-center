@@ -1,0 +1,10 @@
+{
+  "name": "webchecks",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Tier-2 render gate: headless Chromium + axe-core for the defects the stdlib webcheck can't see (grid nesting, contrast, tap targets).",
+  "dependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "playwright": "^1.65.1"
+  }
+}
