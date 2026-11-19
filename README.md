@@ -1,12 +1,33 @@
-# Wi-Fi Command Center
+<p align="center">
+  <img src="docs/images/logo.jpg" alt="Wi-Fi Command Center" width="640">
+</p>
 
-A **local, authorized Wi-Fi security-audit console** — a browser dashboard on your Mac that drives a Kali Linux VM as the radio, cracks on your Mac GPU, and is operated by a **local AI model** (no cloud). Built for learning Wi-Fi security and for **sanctioned competitions on your own gear.**
+<h1 align="center">Wi-Fi Command Center</h1>
 
-![Wi-Fi Command Center](docs/images/header.jpg)
+<p align="center">
+  <b>A local, authorized Wi-Fi security-audit console.</b><br>
+  A browser dashboard on your Mac that drives a Kali Linux VM as the radio,<br>
+  cracks on your Mac GPU, and is operated by a <b>local AI model</b> — no cloud.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/scope-authorized%20testing%20only-red">
+  <img src="https://img.shields.io/badge/AI-100%25%20local-brightgreen">
+  <img src="https://img.shields.io/badge/cracking-Mac%20GPU%20(Metal)-blue">
+  <img src="https://img.shields.io/badge/license-MIT-lightgrey">
+</p>
 
 > ⚠️ **EDUCATIONAL / AUTHORIZED TESTING ONLY.** Use this **only** on networks you own or are explicitly authorized to test. Every attack action is gated by an allowlist you fill in yourself. Attacking networks you don't own is illegal in most countries. See [DISCLAIMER.md](DISCLAIMER.md).
 
 ---
+
+## The console
+
+<p align="center">
+  <img src="docs/images/demo.gif" alt="Wi-Fi Command Center dashboard" width="900">
+</p>
+
+> _All BSSIDs, MAC addresses, network names and recovered keys are redacted in these images. The lab was run on the author's own equipment._
 
 ## What it is
 
@@ -31,16 +52,6 @@ A single dashboard that ties together the standard Wi-Fi audit workflow, with th
 | **Adapter Doctor** | Self-heals the USB Wi-Fi adapter |
 
 Every module ends with its **one-line defense** — the point of the lab is to learn how to *protect* against each attack.
-
-## Screenshots
-
-The scan panel (gated — refuses any BSSID not on your allowlist):
-
-![Scan panel](docs/images/scan.jpg)
-
-The attack modules (GPU cracking, bounded deauth, PMKID, WPS, detector-only rogue-AP):
-
-![Attack modules](docs/images/key-crack.jpg)
 
 ## Architecture
 
